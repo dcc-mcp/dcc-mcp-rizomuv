@@ -4,7 +4,7 @@ build-backend="hatchling.build"
 
 [project]
 name="dcc-mcp-rizomuv"
-version="0.1.0"
+version="0.1.1"
 description="Headless RizomUV adapter for batch UV unwrapping and packing through RizomUVLink"
 readme="README.md"
 requires-python=">=3.9"

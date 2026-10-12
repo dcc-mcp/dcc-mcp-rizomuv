@@ -30,6 +30,12 @@ inside the RizomUV installation and drives an instance over IPC.
 - **One instance per batch.** Launching RizomUV is by far the most expensive
   step; pay it once. Each mesh is still wrapped independently so one unreadable
   file costs that file, not the batch.
+- **No clear is needed between batch loads.** RizomUVLink documents `Load` as
+  "Import (replace existing) ... as new mesh", and the official batch example
+  reuses one instance across a folder without clearing. Do not add a clear
+  "just in case" — it would discard the reuse that makes batching cheap.
+- **Always `Quit({})` on teardown.** A headless instance has no window to close,
+  so returning without quitting leaves an invisible process behind.
 - **Version gates are real.** `headless=True` needs RizomUV 2027.0.417+;
   `background=True` needs 2027.0.297+. An older build given an unparseable flag
   answers with a message box nobody is there to dismiss.
@@ -38,6 +44,17 @@ inside the RizomUV installation and drives an instance over IPC.
   introduce anything that would force Core off Python 3.7.
 - **No arbitrary Python execution.** Tools are a fixed, typed surface declared
   in `tools.yaml`.
+- **Skill scripts take parameters from stdin JSON, not positional argv.** Core's
+  `run_main` reads a JSON object from stdin and calls the entry point with it as
+  keyword arguments; a script reading `sys.argv[1:]` receives nothing and fails
+  100% of the time under MCP. Follow the two-tier order: stdin JSON first, CLI
+  flags only when no payload arrived.
+- **Every script emits a `ToolResultEnvelope`** (`success` / `message` /
+  `context`) and forces UTF-8 stdio. A piped stdout on Windows defaults to the
+  ANSI codepage and raises `UnicodeEncodeError` on CJK mesh paths.
+- **Path confinement compares path components, not text prefixes.**
+  `C:\allowed_evil` starts with `C:\allowed` but is a different directory; use
+  `commonpath`.
 
 ## Layout
 

@@ -18,6 +18,7 @@ import platform
 from typing import Any, Dict
 
 from .discovery import (
+    MIN_BACKGROUND_VERSION,
     MIN_HEADLESS_VERSION,
     executable_candidates,
     import_link_module,
@@ -101,6 +102,7 @@ def run_doctor() -> Dict[str, Any]:
                     "status": "ok" if version else "warn",
                     "detail": version or "version undetermined",
                     "required": ".".join(str(part) for part in MIN_HEADLESS_VERSION),
+                    "background_required": ".".join(str(part) for part in MIN_BACKGROUND_VERSION),
                 }
             )
 

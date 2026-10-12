@@ -38,6 +38,17 @@ class SkillCatalogueTest(unittest.TestCase):
                 script = skill_dir / tool["source_file"]
                 self.assertTrue(script.is_file(), "%s -> %s" % (skill_dir.name, tool["source_file"]))
 
+    def test_skill_frontmatter_declares_the_required_keys(self):
+        for skill_dir in sorted(SKILLS.iterdir()):
+            skill_file = skill_dir / "SKILL.md"
+            if not skill_file.is_file():
+                continue
+            text = skill_file.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("---"), skill_dir.name)
+            frontmatter = text.split("---", 2)[1]
+            for key in FRONTMATTER_KEYS:
+                self.assertIn(key + ":", frontmatter, "%s missing %s" % (skill_dir.name, key))
+
     def test_every_tool_declares_a_schema_and_a_source(self):
         for skill_dir in sorted(SKILLS.iterdir()):
             tools_file = skill_dir / "tools.yaml"

@@ -64,10 +64,25 @@ def resolve_path(path: str) -> str:
     candidate = os.path.abspath(os.path.expanduser(path.strip()))
     roots = allowed_roots()
     if roots:
-        normalized = os.path.normcase(candidate)
-        if not any(normalized.startswith(os.path.normcase(os.path.abspath(root))) for root in roots):
+        if not any(_is_within(candidate, root) for root in roots):
             raise RizomuvError("path is outside %s; refusing to touch it" % _ENV_ALLOWED_ROOTS)
     return candidate.replace("\\", "/")
+
+
+def _is_within(candidate: str, root: str) -> bool:
+    """Whether *candidate* is *root* itself or something beneath it.
+
+    A plain ``startswith`` on the path text is not enough: ``C:\\allowed_evil``
+    and ``C:\\allowed2`` both start with ``C:\\allowed`` while being entirely
+    separate directories. Comparing whole path components with ``commonpath``
+    closes that sibling-prefix escape.
+    """
+    candidate = os.path.normcase(os.path.abspath(candidate))
+    root = os.path.normcase(os.path.abspath(root))
+    try:
+        return os.path.commonpath([root, candidate]) == root
+    except ValueError:  # different drives on Windows
+        return False
 
 
 class RizomuvSession:
@@ -108,6 +123,12 @@ class RizomuvSession:
             port = link.RunRizomUV(exePath=self._exe_path, headless=True, background=self._background)
             version = link.RizomUVVersion()
             if not headless_supported(version):
+                # The process is already up, so refusing it without quitting
+                # leaves an orphan behind on every rejected build.
+                try:
+                    link.Quit({})
+                except Exception:  # noqa: BLE001 - the version error is the real answer
+                    pass
                 self._link = None
                 raise RizomuvError("RizomUV %s is too old for headless mode; 2027.0.417 or later is required" % version)
             self._link = link
@@ -162,10 +183,19 @@ class RizomuvSession:
             if error:
                 return {"status": "error", "path": input_path, "error": error}
 
-            self._link.Unfold({"WorkingSet": "Visible", "PrimType": "Island"})
+            # Every command reads its result. A Save that fails returns an Error
+            # dict instead of raising, and reporting success with a path that was
+            # never written is the same misleading failure as an unchecked Load,
+            # just relocated to the write.
+            commands = [("Unfold", {"WorkingSet": "Visible", "PrimType": "Island"})]
             if pack:
-                self._link.Pack({"WorkingSet": "Visible"})
-            self._link.Save({"File": {"Path": target, "UVWProps": True}})
+                commands.append(("Pack", {"WorkingSet": "Visible"}))
+            commands.append(("Save", {"File": {"Path": target, "UVWProps": True}}))
+
+            for name, payload in commands:
+                error = _error_from_result(getattr(self._link, name)(payload))
+                if error:
+                    return {"status": "error", "path": input_path, "error": "%s: %s" % (name, error)}
 
             try:
                 islands = self._link.Count("Lib.Mesh.Islands")
@@ -179,6 +209,12 @@ class RizomuvSession:
 
         Each mesh is wrapped on its own: one unreadable file in a folder of two
         hundred should cost that file, not the batch.
+
+        No clear is issued between meshes. RizomUVLink documents ``Load`` as
+        "Import (replace existing) the DataMesh as new mesh", and the official
+        batch example reuses one instance across a whole folder without clearing,
+        so a load replaces rather than merges and output N cannot inherit the
+        geometry of meshes 1..N-1.
         """
         with self._lock:
             if self._link is None:
@@ -187,10 +223,21 @@ class RizomuvSession:
             os.makedirs(target_dir, exist_ok=True)
 
             results = []
+            claimed = set()
             for entry in paths:
                 source = resolve_path(entry)
-                name = os.path.splitext(os.path.basename(source))[0]
-                destination = os.path.join(target_dir, name + "_unwrapped.obj").replace("\\", "/")
+                stem, extension = os.path.splitext(os.path.basename(source))
+                # Flattening to the stem would let a/mesh.obj and b/mesh.obj
+                # overwrite each other, so a collision gets a numeric suffix
+                # rather than silently losing a mesh.
+                base_name = "%s_unwrapped%s" % (stem, extension or ".obj")
+                candidate = base_name
+                counter = 1
+                while candidate.lower() in claimed:
+                    candidate = "%s_unwrapped_%d%s" % (stem, counter, extension or ".obj")
+                    counter += 1
+                claimed.add(candidate.lower())
+                destination = os.path.join(target_dir, candidate).replace("\\", "/")
                 try:
                     outcome = self.unwrap_file(source, destination, pack=pack)
                 except RizomuvError as error:
@@ -200,8 +247,16 @@ class RizomuvSession:
                 results.append(outcome)
 
             succeeded = sum(1 for item in results if item.get("status") == "ok")
+            if not results:
+                status = "ok"
+            elif succeeded == len(results):
+                status = "ok"
+            elif succeeded:
+                status = "partial"
+            else:
+                status = "error"
             return {
-                "status": "ok" if succeeded and succeeded == len(results) else "partial",
+                "status": status,
                 "requested": len(results),
                 "succeeded": succeeded,
                 "failed": len(results) - succeeded,
@@ -210,14 +265,16 @@ class RizomuvSession:
             }
 
     def close(self) -> None:
-        """Shut the instance down. Safe to call twice."""
+        """Shut the instance down. Safe to call twice.
+
+        A headless instance has no window to close, so a script that returns
+        without quitting leaves an invisible process behind.
+        """
         with self._lock:
             if self._link is None:
                 return
             try:
-                module = self._link_module
-                if module is not None:
-                    self._link.Close()
+                self._link.Quit({})
             except Exception:  # noqa: BLE001 - teardown must not mask the original result
                 pass
             self._link = None

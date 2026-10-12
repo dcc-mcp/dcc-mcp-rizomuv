@@ -8,10 +8,18 @@ by the adapter rather than delegated to RizomUV.
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import unittest
 
 from dcc_mcp_rizomuv.discovery import _parse_version, headless_supported
-from dcc_mcp_rizomuv.driver import RizomuvError, RizomuvSession, _error_from_result, resolve_path
+from dcc_mcp_rizomuv.driver import (
+    _ENV_ALLOWED_ROOTS,
+    RizomuvError,
+    RizomuvSession,
+    _error_from_result,
+    resolve_path,
+)
 
 
 class ErrorContractTest(unittest.TestCase):
@@ -130,6 +138,17 @@ class CommandResultTest(unittest.TestCase):
         self._session(link).unwrap_file("a.obj", "out.obj", pack=True)
         self.assertEqual(link.commands, ["Unfold", "Pack", "Save"])
 
+    def test_an_empty_batch_is_refused_rather_than_reported_as_success(self):
+        import threading
+
+        session = RizomuvSession.__new__(RizomuvSession)
+        session._link = None
+        session._lock = threading.RLock()
+        session._link_module = object()
+        session._exe_path = "x"
+        with self.assertRaises(RizomuvError):
+            session.unwrap_batch([], "out")
+
 
 class PathConfinementTest(unittest.TestCase):
     def setUp(self):
@@ -163,6 +182,41 @@ class PathConfinementTest(unittest.TestCase):
 
     def test_a_subdirectory_of_the_root_is_accepted(self):
         resolve_path(os.path.join(os.path.abspath(os.sep + "allowed"), "sub", "mesh.obj"))
+
+    def test_a_symlink_inside_the_root_cannot_reach_outside_it(self):
+        """A link is the second escape layer: abspath is purely lexical.
+
+        Windows needs developer mode or elevation for os.symlink, so an
+        OSError skips rather than asserting behaviour that never happened.
+        """
+        root = tempfile.mkdtemp(prefix="rizomuv_jail_")
+        self.addCleanup(shutil.rmtree, root, True)
+        allowed = os.path.join(root, "allowed")
+        secret = os.path.join(root, "secret")
+        os.makedirs(allowed)
+        os.makedirs(secret)
+        outside = os.path.join(secret, "mesh.obj")
+        with open(outside, "w") as handle:
+            handle.write("x")
+        link = os.path.join(allowed, "escape")
+        try:
+            os.symlink(secret, link, target_is_directory=True)
+        except (OSError, NotImplementedError, AttributeError) as error:
+            self.skipTest("symlinks unavailable here: %s" % error)
+        if not os.path.islink(link):
+            self.skipTest("symlink was not created")
+
+        previous = os.environ.get(_ENV_ALLOWED_ROOTS)
+        os.environ[_ENV_ALLOWED_ROOTS] = allowed
+        self.addCleanup(
+            lambda: (
+                os.environ.pop(_ENV_ALLOWED_ROOTS, None)
+                if previous is None
+                else os.environ.__setitem__(_ENV_ALLOWED_ROOTS, previous)
+            )
+        )
+        with self.assertRaises(RizomuvError):
+            resolve_path(os.path.join(link, "mesh.obj"))
 
     def test_empty_path_is_refused(self):
         with self.assertRaises(RizomuvError):

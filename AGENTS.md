@@ -52,9 +52,12 @@ inside the RizomUV installation and drives an instance over IPC.
 - **Every script emits a `ToolResultEnvelope`** (`success` / `message` /
   `context`) and forces UTF-8 stdio. A piped stdout on Windows defaults to the
   ANSI codepage and raises `UnicodeEncodeError` on CJK mesh paths.
-- **Path confinement compares path components, not text prefixes.**
-  `C:\allowed_evil` starts with `C:\allowed` but is a different directory; use
-  `commonpath`.
+- **Path confinement closes two separate escape layers.** `startswith` lets
+  `C:\allowed_evil` pass for `C:\allowed`, so components are compared with
+  `commonpath`. But `abspath` is purely lexical, so a symlink or junction
+  inside the root still reaches outside — confinement and the returned path
+  both use `realpath`. Junctions are common on Windows (`mklink /J`, OneDrive,
+  redirected `Desktop`/`Documents`), so this is not theoretical.
 
 ## Layout
 

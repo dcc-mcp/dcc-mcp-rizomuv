@@ -29,6 +29,18 @@ def _force_utf8_stdio() -> None:
 
 
 def run(params: dict) -> None:
+    if not isinstance(params, dict):
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "message": "expected a JSON object of parameters, got %s" % type(params).__name__,
+                    "context": {},
+                },
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
     path = params.get("path")
     if not path:
         print(

@@ -61,7 +61,10 @@ def resolve_path(path: str) -> str:
     if not path or not path.strip():
         raise RizomuvError("path must be a non-empty string")
 
-    candidate = os.path.abspath(os.path.expanduser(path.strip()))
+    # Resolved rather than merely absolute, so the path that is judged and the
+    # path handed to RizomUV are the same one: judging a lexical path while
+    # passing a link-resolved path to the DCC would let the two disagree.
+    candidate = os.path.realpath(os.path.expanduser(path.strip()))
     roots = allowed_roots()
     if roots:
         if not any(_is_within(candidate, root) for root in roots):
@@ -72,13 +75,19 @@ def resolve_path(path: str) -> str:
 def _is_within(candidate: str, root: str) -> bool:
     """Whether *candidate* is *root* itself or something beneath it.
 
-    A plain ``startswith`` on the path text is not enough: ``C:\\allowed_evil``
-    and ``C:\\allowed2`` both start with ``C:\\allowed`` while being entirely
-    separate directories. Comparing whole path components with ``commonpath``
-    closes that sibling-prefix escape.
+    Two escapes have to be closed, and they are separate layers:
+
+    * A plain ``startswith`` on the path text lets ``C:\\allowed_evil`` and
+      ``C:\\allowed2`` pass for ``C:\\allowed``, so whole path components are
+      compared with ``commonpath`` instead.
+    * ``abspath`` is purely lexical, so a symlink or a Windows junction inside
+      the allowed root still resolves to a target outside it. ``realpath``
+      follows the links first. Junctions matter in practice, not just in theory:
+      ``mklink /J``, OneDrive and redirected ``Desktop`` / ``Documents``
+      folders all create them.
     """
-    candidate = os.path.normcase(os.path.abspath(candidate))
-    root = os.path.normcase(os.path.abspath(root))
+    candidate = os.path.normcase(os.path.realpath(candidate))
+    root = os.path.normcase(os.path.realpath(root))
     try:
         return os.path.commonpath([root, candidate]) == root
     except ValueError:  # different drives on Windows
@@ -215,7 +224,14 @@ class RizomuvSession:
         batch example reuses one instance across a whole folder without clearing,
         so a load replaces rather than merges and output N cannot inherit the
         geometry of meshes 1..N-1.
+
+        An empty batch raises rather than reporting success: "nothing to do" is
+        not the same as "everything I was given succeeded", and ``tools.yaml``
+        already declares ``minItems: 1``.
         """
+        if not paths:
+            raise RizomuvError("unwrap_batch needs at least one mesh path")
+
         with self._lock:
             if self._link is None:
                 self.start()
@@ -247,9 +263,7 @@ class RizomuvSession:
                 results.append(outcome)
 
             succeeded = sum(1 for item in results if item.get("status") == "ok")
-            if not results:
-                status = "ok"
-            elif succeeded == len(results):
+            if succeeded == len(results):
                 status = "ok"
             elif succeeded:
                 status = "partial"

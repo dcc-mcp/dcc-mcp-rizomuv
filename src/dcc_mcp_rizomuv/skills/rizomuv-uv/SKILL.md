@@ -10,7 +10,7 @@ metadata:
   dcc-mcp:
     dcc: rizomuv
     layer: domain
-    version: "0.1.0"  # x-release-please-version
+    version: "0.1.1"  # x-release-please-version
     tags: "rizomuv,uv,unwrap,pack,mcp,dcc,automation"
     tools: tools.yaml
     depends: ["dcc-diagnostics"]

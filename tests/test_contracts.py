@@ -8,6 +8,7 @@ silent to get wrong, which is exactly why they are asserted.
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -25,8 +26,18 @@ class ReleasePleaseTest(unittest.TestCase):
         self.assertTrue((ROOT / ".release-please-manifest.json").is_file())
 
     def test_manifest_version_matches_the_package(self):
+        """The manifest and the package version must agree.
+
+        Asserting a literal version here is a self-destructing ratchet: it is
+        green on main only until release-please bumps the manifest, and red on
+        every release PR after that. Compare against the declared package
+        version instead, so the check holds at any version.
+        """
         manifest = _read_json(ROOT / ".release-please-manifest.json")
-        self.assertEqual(manifest["."], "0.1.0")
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        self.assertIsNotNone(match, "no project version declared in pyproject.toml")
+        self.assertEqual(manifest["."], match.group(1))
 
     def test_every_release_please_extra_file_exists(self):
         config = _read_json(ROOT / "release-please-config.json")
@@ -34,6 +45,43 @@ class ReleasePleaseTest(unittest.TestCase):
         self.assertTrue(extra)
         for entry in extra:
             self.assertTrue((ROOT / entry["path"]).is_file(), entry["path"])
+
+    def test_every_extra_file_carries_the_release_please_marker(self):
+        """A generic extra-file is bumped only via its in-file marker.
+
+        The two SKILL.md files carry `# x-release-please-version` and so were
+        bumped; `__version__.py` did not and was silently skipped, which ships a
+        wheel whose metadata says one version while `--version` and the MCP
+        handshake report another.
+        """
+        config = _read_json(ROOT / "release-please-config.json")
+        for entry in config["packages"]["."]["extra-files"]:
+            if entry.get("type") != "generic":
+                continue
+            text = (ROOT / entry["path"]).read_text(encoding="utf-8")
+            self.assertIn(
+                "x-release-please-version",
+                text,
+                "%s is a generic extra-file without a version marker" % entry["path"],
+            )
+
+    def test_declared_versions_all_agree(self):
+        """Manifest, pyproject, and __version__.py must all report one version."""
+        manifest = _read_json(ROOT / ".release-please-manifest.json")["."]
+        pyproject = re.search(
+            r'^version\s*=\s*"([^"]+)"',
+            (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(pyproject, "no project version declared in pyproject.toml")
+        module = re.search(
+            r'^__version__\s*=\s*"([^"]+)"',
+            (ROOT / "src" / "dcc_mcp_rizomuv" / "__version__.py").read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(module, "no __version__ in the package")
+        self.assertEqual(manifest, pyproject.group(1))
+        self.assertEqual(manifest, module.group(1))
 
 
 class CoreFloorTest(unittest.TestCase):

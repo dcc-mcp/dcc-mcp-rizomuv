@@ -1,0 +1,16 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "dcc-mcp-rizomuv",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "extra-files": [
+        {"type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version"},
+        {"type": "generic", "path": "src/dcc_mcp_rizomuv/__version__.py"},
+        {"type": "generic", "path": "src/dcc_mcp_rizomuv/skills/rizomuv-session/SKILL.md"},
+        {"type": "generic", "path": "src/dcc_mcp_rizomuv/skills/rizomuv-uv/SKILL.md"}
+      ]
+    }
+  }
+}

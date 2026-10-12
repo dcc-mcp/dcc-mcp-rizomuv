@@ -1,0 +1,62 @@
+[build-system]
+requires=["hatchling>=1.26"]
+build-backend="hatchling.build"
+
+[project]
+name="dcc-mcp-rizomuv"
+version="0.1.0"
+description="Headless RizomUV adapter for batch UV unwrapping and packing through RizomUVLink"
+readme="README.md"
+requires-python=">=3.9"
+license={text="MIT"}
+authors=[{name="loonghao",email="hal.long@outlook.com"}]
+keywords=["rizomuv","uv","unwrap","pack","dcc","mcp","automation","headless"]
+classifiers=[
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+]
+# A003: an explicit lower bound is mandatory. A012: 0.20.36 is the organisation
+# baseline, the highest floor any adapter already declares.
+dependencies=["dcc-mcp-core>=0.20.36,<1.0.0"]
+
+[project.urls]
+Homepage="https://github.com/dcc-mcp/dcc-mcp-rizomuv"
+Repository="https://github.com/dcc-mcp/dcc-mcp-rizomuv"
+Issues="https://github.com/dcc-mcp/dcc-mcp-rizomuv/issues"
+
+[project.optional-dependencies]
+test=["pytest>=8","ruff>=0.8","PyYAML>=6","jsonschema>=4.23"]
+dev=["pytest>=8","ruff>=0.8","PyYAML>=6","jsonschema>=4.23","build>=1.2","twine>=6"]
+
+[project.scripts]
+dcc-mcp-rizomuv="dcc_mcp_rizomuv.server:main"
+
+[project.entry-points."dcc_mcp.adapters"]
+rizomuv="dcc_mcp_rizomuv:RizomuvMcpServer"
+
+[tool.hatch.build.targets.wheel]
+packages=["src/dcc_mcp_rizomuv"]
+artifacts=["src/dcc_mcp_rizomuv/skills/**"]
+
+[tool.hatch.build.targets.sdist]
+exclude=["docs/**/*.png", "docs/**/*.svg", "docs/**/*.webp"]
+
+[tool.pytest.ini_options]
+testpaths=["tests"]
+pythonpath=["src","."]
+markers=["rizomuv: requires a licensed RizomUV 2027 runtime"]
+
+[tool.ruff.lint]
+# FA catches PEP 604 unions (`dict | None`) written without
+# `from __future__ import annotations`, which raise at runtime on Python 3.9.
+select=["E","F","I","B","FA"]
+
+[tool.ruff]
+line-length=120
+target-version="py39"

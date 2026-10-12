@@ -1,0 +1,43 @@
+tools:
+  - name: unwrap_file
+    description: Load, unfold, pack and save one mesh through a headless RizomUV instance.
+    source_file: scripts/unwrap_file.py
+    input_schema:
+      type: object
+      required: [path]
+      properties:
+        path: {type: string, minLength: 1, maxLength: 4096}
+        output_path: {type: string, minLength: 1, maxLength: 4096}
+        pack: {type: boolean, default: true}
+      additionalProperties: false
+    output_schema: {type: object}
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 1800
+    annotations: {read_only_hint: false, destructive_hint: true, idempotent_hint: false, open_world_hint: false, deferred_hint: true}
+    next-tools: {on-success: [unwrap_batch], on-failure: [rizomuv-session.get_status]}
+
+  - name: unwrap_batch
+    description: Unwrap a folder of meshes through one reused headless instance, reporting per-file success.
+    source_file: scripts/unwrap_batch.py
+    input_schema:
+      type: object
+      required: [paths, output_dir]
+      properties:
+        paths:
+          type: array
+          minItems: 1
+          items: {type: string, minLength: 1, maxLength: 4096}
+        output_dir: {type: string, minLength: 1, maxLength: 4096}
+        pack: {type: boolean, default: true}
+      additionalProperties: false
+    output_schema: {type: object}
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 3600
+    annotations: {read_only_hint: false, destructive_hint: true, idempotent_hint: false, open_world_hint: false, deferred_hint: true}
+    next-tools: {on-success: [], on-failure: [rizomuv-session.get_status]}

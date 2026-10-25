@@ -3,6 +3,13 @@
 Headless [RizomUV](https://www.rizomuv.com/) adapter for DCC-MCP: batch UV
 unwrapping and packing driven by an AI agent, with no window ever appearing.
 
+## Validation status
+
+The adapter is implemented and has a [v0.1.1 GitHub release](https://github.com/dcc-mcp/dcc-mcp-rizomuv/releases/tag/v0.1.1).
+Default CI runs host-free driver and contract tests; licensed-host tests are
+excluded by default. No native acceptance record is committed in this repository,
+so green CI does not establish real RizomUV load, unwrap, pack or save behavior.
+
 ## Why headless
 
 RizomUV 2027 ships a headless mode (`-hl` / `--headless`) in which the whole
